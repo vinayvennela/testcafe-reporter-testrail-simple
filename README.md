@@ -3,6 +3,17 @@
 
 This is the **testrail-simple** reporter plugin for [TestCafe](http://devexpress.github.io/testcafe).
 
+This reporter needs only 3 configuration parameters TestRail host, username and password
+and does the required back tracing to collect information like project id, suite id etc that are required to
+publish the Test Run results to TestRail.
+
+No need to rename/ append the TestRailCase ids into the test case name, just add the tag {testRailCaseId: CXXXXX} in the test meta and reporter will picks up the info.
+
+Easy and Clean!
+
+Did i say the reporter name is testrail-simple? Guess it should be testrail-very-simple LOL!!!
+
+
 <p align="center">
     <img src="https://raw.github.com/vinayvennela/testcafe-reporter-testrail-simple/master/media/preview.png" alt="preview" />
 </p>
@@ -11,6 +22,20 @@ This is the **testrail-simple** reporter plugin for [TestCafe](http://devexpress
 
 ```
 npm install testcafe-reporter-testrail-simple
+```
+
+## Configuration
+
+- TestCases should have the TestRail case ids present in the test meta in the format
+{testRailCaseId: 'C12345'}
+```
+test.meta({testRailCaseId: 'C239234'})
+```
+- The reporter requires 3 environment variables to be present
+```
+TESTRAIL_HOST: https://vinay.testrail.com
+TESTRAIL_USERNAME: username
+TESTRAIL_APIKEY: password or api key
 ```
 
 ## Usage
@@ -34,4 +59,4 @@ testCafe
 ```
 
 ## Author
-vvennela (http://n/A)
+vinayvennela
