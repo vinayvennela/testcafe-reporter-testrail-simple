@@ -3,6 +3,8 @@
 
 This is the **testrail-simple** reporter plugin for [TestCafe](http://devexpress.github.io/testcafe).
 
+Update v1.1.1: The reporter now supports uploading screenshots to as well
+
 This reporter needs only 3 configuration parameters TestRail host, username and password
 and does the required back tracing to collect information like project id, suite id etc that are required to
 publish the Test Run results to TestRail.

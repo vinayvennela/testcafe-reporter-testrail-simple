@@ -1,16 +1,18 @@
-var Testrail = require('testrail-api');
+const Testrail = require('testrail-js-api');
 //TODO Keep Error messages in separate file
 
 module.exports = function () {
     return {
-        testResults:             {},
-        noColors:                true,
-        TESTRAIL_STATUS_FAIL:    5,
-        TESTRAIL_STATUS_SKIPPED: 3,
-        TESTRAIL_STATUS_SUCCESS: 1,
-        testrail:                null,
-        projectRuns:             {},
-        suitesMap:               {},
+        testResults:              {},
+        noColors:                 true,
+        TESTRAIL_STATUS_FAIL:     5,
+        TESTRAIL_STATUS_SKIPPED:  3,
+        TESTRAIL_STATUS_SUCCESS:  1,
+        testrail:                 null,
+        projectRuns:              {},
+        suitesMap:                {},
+        screenshotsToCaseIdMap:   {},
+        screenshotsToResultIdMap: {},
 
         reportTaskStart (/* startTime, userAgents, testCount*/) {
             let reqParamsPresent = true;
@@ -29,7 +31,7 @@ module.exports = function () {
             }
 
             if (reqParamsPresent)
-                this.testrail = new Testrail({ host: process.env.TESTRAIL_HOST, user: process.env.TESTRAIL_USERNAME, password: process.env.TESTRAIL_APIKEY });
+                this.testrail = new Testrail.TestRail(process.env.TESTRAIL_HOST, process.env.TESTRAIL_USERNAME, process.env.TESTRAIL_APIKEY );
             else {
                 console.error('Error. Expected all 3 TESTRAIL_HOST, TESTRAIL_USERNAME, TESTRAIL_APIKEY ' +
                     'in environment variables for the testrail-simple reporter to work');
@@ -49,7 +51,7 @@ module.exports = function () {
                 testRailCaseId = testRailCaseId.replace('C', '').trim();
 
                 try {
-                    const { 'body': caseInfo } = await this.testrail.getCase(testRailCaseId);
+                    const { 'value': caseInfo } = await this.testrail.getCase(testRailCaseId);
                     const suiteId = caseInfo.suite_id;
 
                     let projectId = null;
@@ -57,7 +59,7 @@ module.exports = function () {
                     // Optimization to avoid querying testrail multiple times for the same suiteId
                     // If project id is fetched from suite, store it in memory and use further
                     if (!this.suitesMap[suiteId]) {
-                        const { 'body': suiteInfo } = await this.testrail.getSuite(suiteId);
+                        const { 'value': suiteInfo } = await this.testrail.getSuite(suiteId);
 
                         projectId = suiteInfo.project_id;
                         this.suitesMap[suiteId] = projectId;
@@ -88,8 +90,15 @@ module.exports = function () {
         reportTestDone (name, testRunInfo) {
             const testStatus = this.getTestStatus(testRunInfo);
 
-            if (this.testResults[name])
+
+            if (this.testResults[name]) {
                 this.testResults[name]['status_id'] = testStatus;
+                if (testRunInfo.screenshots.length > 0)
+                    this.screenshotsToCaseIdMap[this.testResults[name]['case_id']] = this.getScreeshotPaths(testRunInfo);
+                console.log('Found scrre shots');
+            }
+
+
         },
 
         async reportTaskDone (/* endTime, passed, warnings */) {
@@ -104,6 +113,11 @@ module.exports = function () {
                 await this.updateTestResultsToRuns();
 
                 console.log('Publishing results to TestRail is complete');
+
+                console.log('Uploading screenshots');
+                await this.uploadScreenshots();
+
+                console.log('Uploading screenshots is complete');
             }
             else {
                 console.log('Nothing to publish. \nIf this is not expected then' +
@@ -122,6 +136,16 @@ module.exports = function () {
                 return this.TESTRAIL_STATUS_SKIPPED;
             return this.TESTRAIL_STATUS_SUCCESS;
         },
+        getScreeshotPaths (testRunInfo) {
+            const screenshotsPath = [];
+
+            for (const meta of testRunInfo.screenshots) {
+                console.log(meta);
+                screenshotsPath.push(meta['screenshotPath']);
+            }
+
+            return screenshotsPath;
+        },
 
         async createNewTestRun (projectId, suiteId) {
             const data = {
@@ -130,7 +154,7 @@ module.exports = function () {
             };
 
             try {
-                const { 'body': runInfo } = await this.testrail.addRun(projectId, data);
+                const { 'value': runInfo } = await this.testrail.addRun(projectId, data);
                 const runId = runInfo.id;
 
                 console.log(`Created new test run with id ${runId} for suiteId ${suiteId} & project id ${projectId}`);
@@ -194,7 +218,9 @@ module.exports = function () {
                     console.log(`Adding results for suite id ${suiteId} and run id ${results['run_id']}`);
                     try {
                         if (results['results'].length > 0) {
-                            await this.testrail.addResultsForCases(results['run_id'], results['results']);
+                            const casesResults = await this.testrail.addResultsForCases(results['run_id'], results['results']);
+
+                            await this.identifyScreenshotsForResults(casesResults, results);
                             console.log('SUCCESS !');
                         }
                         else
@@ -207,6 +233,38 @@ module.exports = function () {
 
                 }
             }
+        },
+
+        async identifyScreenshotsForResults (caseResult, results) {
+            // console.log(caseResult);
+            // console.log(results);
+            for (let i = 0; i < results['results'].length; i++) {
+                const caseIdTemp = results['results'][i]['case_id'];
+
+                if (this.screenshotsToCaseIdMap[caseIdTemp])
+                    this.screenshotsToResultIdMap[caseResult['value'][i]['id']] = this.screenshotsToCaseIdMap[caseIdTemp];
+
+            }
+            console.log(this.screenshotsToResultIdMap);
+        },
+
+        async uploadScreenshots () {
+            // control behavior with a variable
+            for ( const [resultId, screenshotsPathList] of Object.entries(this.screenshotsToResultIdMap)) {
+                for ( const screenshotPath of screenshotsPathList) {
+                    try {
+                        await this.testrail.addAttachmentToResult(resultId, screenshotPath);
+                    }
+                    catch (e) {
+                        console.log(`Exception occurred while uploading screenshots for result id ${resultId}
+                        and screenshot path ${screenshotPath} with exception ${e.error.message}`);
+                    }
+
+                }
+
+            }
+
+
         }
     };
 };
