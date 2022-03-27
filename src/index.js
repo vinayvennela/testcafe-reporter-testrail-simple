@@ -126,7 +126,7 @@ module.exports = function () {
         async createNewTestRun (projectId, suiteId) {
             const data = {
                 'suite_id': suiteId,
-                'name':     'The sample Run'
+                'name':     `Test Run for ${new Date()}`
             };
 
             try {

@@ -1,6 +1,6 @@
 {
   "name": "testcafe-reporter-testrail-simple",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "testrail-simple TestCafe reporter plugin.",
   "repository": "https://github.com/vinayvennela/testcafe-reporter-testrail-simple",
   "author": {
