@@ -50,33 +50,41 @@ module.exports = function () {
             if (testRailCaseId) {
                 testRailCaseId = testRailCaseId.replace('C', '').trim();
 
-                try {
-                    const { 'value': caseInfo } = await this.testrail.getCase(testRailCaseId);
-                    const suiteId = caseInfo.suite_id;
+                if (this.testrail) {
+                    try {
 
-                    let projectId = null;
+                        const { 'value': caseInfo } = await this.testrail.getCase(testRailCaseId);
 
-                    // Optimization to avoid querying testrail multiple times for the same suiteId
-                    // If project id is fetched from suite, store it in memory and use further
-                    if (!this.suitesMap[suiteId]) {
-                        const { 'value': suiteInfo } = await this.testrail.getSuite(suiteId);
+                        // If error is received then throw exception
+                        if ('error' in caseInfo)
+                            throw new Error(caseInfo['error']);
 
-                        projectId = suiteInfo.project_id;
-                        this.suitesMap[suiteId] = projectId;
+                        const suiteId = caseInfo.suite_id;
+
+                        let projectId = null;
+
+                        // Optimization to avoid querying testrail multiple times for the same suiteId
+                        // If project id is fetched from suite, store it in memory and use further
+                        if (!this.suitesMap[suiteId]) {
+                            const { 'value': suiteInfo } = await this.testrail.getSuite(suiteId);
+
+                            projectId = suiteInfo.project_id;
+                            this.suitesMap[suiteId] = projectId;
+                        }
+                        else
+                            projectId = this.suitesMap[suiteId];
+
+
+                        this.testResults[name] = {
+                            'case_id':    testRailCaseId,
+                            'suite_id':   suiteId,
+                            'project_id': projectId
+                        };
                     }
-                    else
-                        projectId = this.suitesMap[suiteId];
-
-
-                    this.testResults[name] = {
-                        'case_id':    testRailCaseId,
-                        'suite_id':   suiteId,
-                        'project_id': projectId
-                    };
-                }
-                catch (e) {
-                    console.error(`Error occurred while fetching the suite and project id .
-                    \n TestRailException : ${e.message.error}`);
+                    catch (e) {
+                        console.error(`Error occurred while fetching the suite and project id .
+                \n TestRailException : ${e.message}`);
+                    }
                 }
 
             }
@@ -95,7 +103,6 @@ module.exports = function () {
                 this.testResults[name]['status_id'] = testStatus;
                 if (testRunInfo.screenshots.length > 0)
                     this.screenshotsToCaseIdMap[this.testResults[name]['case_id']] = this.getScreeshotPaths(testRunInfo);
-                console.log('Found scrre shots');
             }
 
 
@@ -106,23 +113,36 @@ module.exports = function () {
             console.log('Started Publishing results to TestRail');
 
             if (Object.keys(this.testResults).length > 0) {
-                console.log('Creating required TestRuns');
+                console.log('----> Creating required TestRuns');
                 await this.checkNCreateTestRuns();
 
-                console.log('Updating test results to Runs');
+                console.log('----> Updating test results to Runs');
                 await this.updateTestResultsToRuns();
+
+                if (Object.values(this.screenshotsToCaseIdMap).length > 0) {
+                    if (!process.env.SKIP_UPLOAD_SCREENSHOTS) {
+
+                        console.log('Uploading screenshots');
+                        await this.uploadScreenshots();
+
+                        console.log('Uploading screenshots is complete');
+                    }
+                    else {
+                        console.log('Found screenshots in the executed tests, consider removing the env variable ' +
+                            'SKIP_UPLOAD_SCREENSHOTS to upload screenshots to test run results');
+                    }
+                }
+                else
+                    console.log('No screenshots found to upload!');
 
                 console.log('Publishing results to TestRail is complete');
 
-                console.log('Uploading screenshots');
-                await this.uploadScreenshots();
 
-                console.log('Uploading screenshots is complete');
             }
             else {
                 console.log('Nothing to publish. \nIf this is not expected then' +
                 '\nAre your credentials correct?' +
-                '\nDoes any of your test cases have the testRailCaseId key-value in test META?');
+                '\nDoes any of your test cases have a valid testRailCaseId key-value in test META?');
             }
 
             console.log('****************************************************************');
@@ -139,10 +159,8 @@ module.exports = function () {
         getScreeshotPaths (testRunInfo) {
             const screenshotsPath = [];
 
-            for (const meta of testRunInfo.screenshots) {
-                console.log(meta);
+            for (const meta of testRunInfo.screenshots)
                 screenshotsPath.push(meta['screenshotPath']);
-            }
 
             return screenshotsPath;
         },
@@ -221,7 +239,6 @@ module.exports = function () {
                             const casesResults = await this.testrail.addResultsForCases(results['run_id'], results['results']);
 
                             await this.identifyScreenshotsForResults(casesResults, results);
-                            console.log('SUCCESS !');
                         }
                         else
                             console.log('SKIPPED as no tests were run in this suite');
@@ -236,8 +253,6 @@ module.exports = function () {
         },
 
         async identifyScreenshotsForResults (caseResult, results) {
-            // console.log(caseResult);
-            // console.log(results);
             for (let i = 0; i < results['results'].length; i++) {
                 const caseIdTemp = results['results'][i]['case_id'];
 
@@ -245,11 +260,9 @@ module.exports = function () {
                     this.screenshotsToResultIdMap[caseResult['value'][i]['id']] = this.screenshotsToCaseIdMap[caseIdTemp];
 
             }
-            console.log(this.screenshotsToResultIdMap);
         },
 
         async uploadScreenshots () {
-            // control behavior with a variable
             for ( const [resultId, screenshotsPathList] of Object.entries(this.screenshotsToResultIdMap)) {
                 for ( const screenshotPath of screenshotsPathList) {
                     try {
