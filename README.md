@@ -3,7 +3,7 @@
 
 This is the **testrail-simple** reporter plugin for [TestCafe](http://devexpress.github.io/testcafe).
 
-Update v1.1.1: The reporter now supports uploading screenshots to as well
+Update v1.1.1: The reporter now supports uploading screenshots by default. ^^ Requires [test result edit](https://www.gurock.com/testrail/docs/user-guide/howto/results/) enabled in testrail.
 
 This reporter needs only 3 configuration parameters TestRail host, username and password
 and does the required back tracing to collect information like project id, suite id etc that are required to
@@ -40,6 +40,9 @@ TESTRAIL_USERNAME: username
 TESTRAIL_APIKEY: password or api key
 ```
 
+| ENV Variable                   | Default            | Description                                                |  Default           | Required |
+| ------------------------------ | ------------------ | -------------------------------------                      | :----------------: | :------: |
+| SKIP_UPLOAD_SCREENSHOTS        | `false`            | Set this to true to Skip Uploading screenshots to TestRail |   `false`          |   false  |
 ## Usage
 
 When you run tests from the command line, specify the reporter name by using the `--reporter` option:
